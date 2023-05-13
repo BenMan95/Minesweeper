@@ -34,7 +34,8 @@ public class Board extends JPanel {
 
         revealed = new boolean[rows][cols];
         for (int r = 0; r < rows; r++)
-            Arrays.fill(revealed, false);
+            for (int c = 0; c < cols; c++)
+                revealed[r][c] = false;
 
         width = cols*CELL_SIZE + X_PADDING;
         height = rows*CELL_SIZE + Y_PADDING;
@@ -86,7 +87,7 @@ public class Board extends JPanel {
     }
 
     private void drawBoard(Graphics2D g2d) {
-        // TODO
+
     }
 
     private class Mouse extends MouseAdapter {
