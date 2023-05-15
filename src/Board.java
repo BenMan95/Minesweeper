@@ -1,10 +1,11 @@
 import javax.swing.*;
+import javax.swing.Timer;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
 import java.util.*;
 
-public class Board extends JComponent {
+public class Board extends JComponent implements ActionListener {
 
     static private final int CELL_SIZE = 16;
     static private final int SCALE = 2;
@@ -21,78 +22,41 @@ public class Board extends JComponent {
         }
     }}
 
-    private int rows;
-    private int cols;
-    private int numMines;
-    private int numRevealed;
-    private boolean[][] mines;
-    private boolean[][] revealed;
+    private Game game;
 
+    private Timer timer;
     private int time;
+
+    private int mouseButton; // 0 if no button pressed
+    private int clickArea; // 0 if board clicked, 1 if face clicked
+    private int mouseX;
+    private int mouseY;
 
     private int width;
     private int height;
 
     public Board(int rows, int cols, int mines) {
-        setBoard(rows, cols, mines);
         addMouseListener(new Mouse());
+        timer = new Timer(1000, this);
+
+        game = new Game();
+        setBoard(rows, cols, mines);
+        startGame();
+        repaint();
     }
 
-    public void setBoard(int rows, int cols, int numMines) {
-        this.rows = rows;
-        this.cols = cols;
-        this.numMines = numMines;
-
-        mines = new boolean[rows][cols];
-        revealed = new boolean[rows][cols];
-        setMines();
-
+    public void setBoard(int rows, int cols, int mines) {
+        game.setBoard(rows, cols, mines);
         width = cols*CELL_SIZE+20;
         height = rows*CELL_SIZE+63;
         Dimension size = new Dimension(width*SCALE, height*SCALE);
         setPreferredSize(size);
-        repaint();
     }
 
-    public void setMines() {
-        // generate mines
-        int size = rows*cols;
-        boolean[] arr = new boolean[size];
-        for (int i = 0; i < size; i++)
-            arr[i] = i < numMines;
-
-        // shuffle mines
-        Random rand = new Random();
-        for (int i = 1; i < size; i++) {
-            int j = rand.nextInt(i);
-            boolean temp = arr[i];
-            arr[i] = arr[j];
-            arr[j] = temp;
-        }
-
-        // place mines
-        for (int r = 0; r < rows; r++)
-            for (int c = 0; c < cols; c++)
-                mines[r][c] = arr[r*cols + c];
-
-        // reset revealed spaces
-        numRevealed = 0;
-        for (int r = 0; r < rows; r++)
-            for (int c = 0; c < cols; c++)
-                revealed[r][c] = false;
-    }
-
-    private int count3x3(int r, int c) {
-        int count = 0;
-        for (int rn = r-1; rn <= r+1; rn++) {
-            if (rn < 0 || rn >= rows)
-                continue;
-            for (int cn = c-1; cn <= c+1; cn++)
-                if (cn >= 0 && cn < cols)
-                    if (mines[rn][cn])
-                        count++;
-        }
-        return count;
+    public void startGame() {
+        game.startGame();
+        timer.stop();
+        time = 0;
     }
 
     @Override
@@ -104,8 +68,8 @@ public class Board extends JComponent {
         drawBackground(g2d);
         drawHeaders(g2d);
 
-        for (int r = 0; r < rows; r++)
-            for (int c = 0; c < cols; c++)
+        for (int r = 0; r < game.getRows(); r++)
+            for (int c = 0; c < game.getCols(); c++)
                 drawCell(g2d, r, c);
     }
 
@@ -127,8 +91,10 @@ public class Board extends JComponent {
         g2d.fillRect(9, 9, width-15, 2);
         g2d.fillRect(9, 52, width-15, 3);
         g2d.fillRect(9, 52, 3, height-58);
-        g2d.fillRect(cols*CELL_SIZE/2-1, 15, 24, 24);
-        g2d.fillRect(cols*CELL_SIZE/2, 16, 24, 24);
+
+        int faceX = game.getCols()*CELL_SIZE/2;
+        g2d.fillRect(faceX-1, 15, 24, 24);
+        g2d.fillRect(faceX, 16, 24, 24);
 
         // draw corners
         Image img;
@@ -143,7 +109,7 @@ public class Board extends JComponent {
     private void drawHeaders(Graphics2D g2d) {
         // draw mine count
         String disp;
-        int remMines = numMines - numRevealed;
+        int remMines = game.getNumMines() - game.getNumFlags();
         if (remMines > 999) disp = "999";
         else if (remMines < -99) disp = "-99";
         else disp = String.format("%03d", remMines);
@@ -166,20 +132,37 @@ public class Board extends JComponent {
         }
 
         // draw face
-        // TODO: add other faces
-        String filename = "face_smile.png";
+        String filename;
+        if (game.getState() == Game.STATE_WIN)
+            filename = "face_win.png";
+        else if (game.getState() == Game.STATE_LOSE)
+            filename = "face_lose.png";
+        else {
+            if (mouseButton == MouseEvent.BUTTON1 || mouseButton == MouseEvent.BUTTON2)
+                filename = "face_reveal.png";
+            else
+                filename = "face_smile.png";
+        }
+
         Image img = images.get(filename);
-        g2d.drawImage(img, cols*CELL_SIZE/2, 16, this);
+        g2d.drawImage(img, game.getCols()*CELL_SIZE/2, 16, this);
     }
 
     private void drawCell(Graphics2D g2d, int r, int c) {
-        // TODO: set correct images
         String filename;
-        if (mines[r][c]) filename = "flag.png";
-        else filename = String.format("mines%d.png", count3x3(r,c));
+        if (game.getCell(r,c) == Game.CELL_FLAGGED)
+            filename = "flag.png";
+        else
+            filename = String.format("mines%d.png", game.count3x3(r,c));
 
         Image img = images.get(filename);
         g2d.drawImage(img, c*CELL_SIZE + 12, r*CELL_SIZE + 55, this);
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        time++;
+        repaint();
     }
 
     private class Mouse extends MouseAdapter {
@@ -190,6 +173,10 @@ public class Board extends JComponent {
         @Override
         public void mouseReleased(MouseEvent e) {
             int button = e.getButton();
+        }
+        @Override
+        public void mouseMoved(MouseEvent e) {
+
         }
     }
 
