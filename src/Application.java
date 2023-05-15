@@ -1,5 +1,6 @@
-import java.awt.EventQueue;
-import java.awt.event.ItemEvent;
+import java.awt.*;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.*;
 
 public class Application extends JFrame {
@@ -10,6 +11,11 @@ public class Application extends JFrame {
         setResizable(false);
         setTitle("Minesweeper");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+        List<Image> icons = new ArrayList<>();
+        icons.add(new ImageIcon("icon_small.png").getImage());
+        icons.add(new ImageIcon("icon.png").getImage());
+        setIconImages(icons);
 
         board = new Board(16, 30, 99);
         add(board);
@@ -48,6 +54,22 @@ public class Application extends JFrame {
                     int rows = Integer.parseInt(rowField.getText());
                     int cols = Integer.parseInt(colField.getText());
                     int mines = Integer.parseInt(colField.getText());
+
+                    if (rows == 0 || cols == 0) {
+                        JOptionPane.showMessageDialog(null, "Board is too small!", "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+
+                    if (mines == 0) {
+                        JOptionPane.showMessageDialog(null, "Not enough mines!", "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+
+                    if (mines >= rows * cols) {
+                        JOptionPane.showMessageDialog(null, "Too many mines!", "Error", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+
                     board.setBoard(rows, cols, mines);
                     pack();
                 } catch (NumberFormatException ex) {
