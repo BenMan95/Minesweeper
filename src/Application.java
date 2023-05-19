@@ -53,9 +53,9 @@ public class Application extends JFrame {
                 try {
                     int rows = Integer.parseInt(rowField.getText());
                     int cols = Integer.parseInt(colField.getText());
-                    int mines = Integer.parseInt(colField.getText());
+                    int mines = Integer.parseInt(minesField.getText());
 
-                    if (rows == 0 || cols == 0) {
+                    if (rows <= 0 || cols < 8) {
                         JOptionPane.showMessageDialog(null, "Board is too small!", "Error", JOptionPane.ERROR_MESSAGE);
                         return;
                     }

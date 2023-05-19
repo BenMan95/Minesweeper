@@ -1,4 +1,3 @@
-import java.awt.*;
 import java.util.Random;
 
 public class Game {
@@ -6,7 +5,7 @@ public class Game {
     public static final int CELL_HIDDEN = -1;
     public static final int CELL_FLAGGED = -2;
 
-    public static final int STATE_PLAYING = 0;
+    public static final int STATE_PLAY = 0;
     public static final int STATE_WIN = 1;
     public static final int STATE_LOSE = 2;
 
@@ -22,15 +21,6 @@ public class Game {
 
     private int state;
 
-    public int getRows() { return rows; }
-    public int getCols() { return cols; }
-    public int getNumMines() { return numMines; }
-    public int getNumFlags() { return numFlags; }
-    public int getState() { return state; }
-
-    public boolean getMine(int r, int c) { return mines[r][c]; }
-    public int getCell(int r, int c) { return cells[r][c]; }
-
     public void setBoard(int rows, int cols, int numMines) {
         this.rows = rows;
         this.cols = cols;
@@ -39,6 +29,20 @@ public class Game {
         mines = new boolean[rows][cols];
         cells = new int[rows][cols];
         startGame();
+    }
+
+    public int getRows() { return rows; }
+    public int getCols() { return cols; }
+    public int getNumMines() { return numMines; }
+    public int getNumFlags() { return numFlags; }
+    public int getNumRevealed() { return numRevealed; }
+    public int getState() { return state; }
+
+    public boolean getMine(int r, int c) { return mines[r][c]; }
+    public int getCell(int r, int c) { return cells[r][c]; }
+
+    public boolean inBounds(int r, int c) {
+        return r >= 0 && c >= 0 && r < rows && c < cols;
     }
 
     public void startGame() {
@@ -67,19 +71,26 @@ public class Game {
 
         numFlags = 0;
         numRevealed = 0;
-        state = 0;
+        state = STATE_PLAY;
     }
 
-    public void setFlag(int r, int c) {
-        if (state != STATE_PLAYING)
+    // toggle flag if able
+    // does not check for out of bounds
+    public void toggleFlag(int r, int c) {
+        if (state != STATE_PLAY)
             return;
 
-        if (cells[r][c] == CELL_FLAGGED) cells[r][c] = CELL_HIDDEN;
-        else if (cells[r][c] == CELL_HIDDEN) cells[r][c] = CELL_FLAGGED;
+        if (cells[r][c] == CELL_FLAGGED)
+            cells[r][c] = CELL_HIDDEN;
+        else if (cells[r][c] == CELL_HIDDEN)
+            cells[r][c] = CELL_FLAGGED;
     }
 
+    // reveal cell if able
+    // also reveals cells around 0
+    // does not check for out of bounds
     public void reveal(int r, int c) {
-        if (state != STATE_PLAYING)
+        if (state != STATE_PLAY)
             return;
 
         if (cells[r][c] != CELL_HIDDEN)
@@ -91,7 +102,7 @@ public class Game {
             return;
         }
 
-        cells[r][c] = count3x3(r, c);
+        cells[r][c] = countMines3x3(r, c);
         if (cells[r][c] == 0)
             reveal3x3(r, c);
 
@@ -100,23 +111,39 @@ public class Game {
             state = STATE_WIN;
     }
 
+    // reveal cells in 3x3 area if able
+    // does not check for out of bounds
     public void reveal3x3(int r, int c) {
-        for (int rn = r-1; r <= r+1; r++) {
+        for (int rn = r-1; rn <= r+1; rn++) {
             if (rn < 0 || rn >= rows)
                 continue;
-            for (int cn = c - 1; c <= c + 1; c++)
+            for (int cn = c-1; cn <= c+1; cn++)
                 if (cn >= 0 && cn < cols)
-                    reveal(r, c);
+                    reveal(rn, cn);
         }
     }
 
-    public int count3x3(int r, int c) {
+    // count mines in a 3x3 area
+    public int countMines3x3(int r, int c) {
         int count = 0;
         for (int rn = r-1; rn <= r+1; rn++) {
             if (rn < 0 || rn >= rows)
                 continue;
             for (int cn = c-1; cn <= c+1; cn++)
                 if (cn >= 0 && cn < cols && mines[rn][cn])
+                    count++;
+        }
+        return count;
+    }
+
+    // count flags in a 3x3 area
+    public int countFlags3x3(int r, int c) {
+        int count = 0;
+        for (int rn = r-1; rn <= r+1; rn++) {
+            if (rn < 0 || rn >= rows)
+                continue;
+            for (int cn = c-1; cn <= c+1; cn++)
+                if (cn >= 0 && cn < cols && cells[rn][cn] == CELL_FLAGGED)
                     count++;
         }
         return count;
