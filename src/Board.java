@@ -16,17 +16,17 @@ public class Board extends JComponent implements ActionListener {
 
     static private final File ASSETS = new File("sprites");
     static private final Map<String, Image> IMAGES = new HashMap<>();
-    {{
-        for (File f : ASSETS.listFiles()) {
+    static {{
+        for (File f : Objects.requireNonNull(ASSETS.listFiles())) {
             ImageIcon icon = new ImageIcon(f.getPath());
             Image image = icon.getImage();
             IMAGES.put(f.getName(), image);
         }
     }}
 
-    private Game game;
+    private final Game game;
 
-    private Timer timer;
+    private final Timer timer;
     private int time;
 
     private boolean button1; // left click
@@ -43,25 +43,30 @@ public class Board extends JComponent implements ActionListener {
     private int height;
 
     public Board(int rows, int cols, int mines) {
+        // add mouse controls
         MouseAdapter mouse = new Mouse();
         addMouseListener(mouse);
         addMouseMotionListener(mouse);
+
+        // set timer
         timer = new Timer(0, this);
         timer.setDelay(1000);
 
+        // start game
         game = new Game();
         setBoard(rows, cols, mines);
-        startGame();
         repaint();
     }
 
     public void setBoard(int rows, int cols, int mines) {
+        // set size
         game.setBoard(rows, cols, mines);
-
         width = cols * CELL_SIZE + 20;
         height = rows * CELL_SIZE + 63;
         Dimension size = new Dimension(width*SCALE, height*SCALE);
         setPreferredSize(size);
+
+        startGame();
     }
 
     public void startGame() {
@@ -89,6 +94,7 @@ public class Board extends JComponent implements ActionListener {
         g2d.fillRect(9, 52, width-15, 3);
         g2d.fillRect(9, 52, 3, height-58);
 
+        // draw borders for face
         int faceX = width/2 - 10;
         g2d.fillRect(faceX-1, 15, 25, 25);
         g2d.fillRect(faceX, 16, 25, 25);
@@ -109,10 +115,14 @@ public class Board extends JComponent implements ActionListener {
 
         // get displayed mine count
         String minesDisplay;
-        int remMines = game.getNumMines() - game.getNumFlags();
-        if (remMines > 999) minesDisplay = "999";
-        else if (remMines < -99) minesDisplay = "-99";
-        else minesDisplay = String.format("%03d", remMines);
+        if (game.getState() == Game.STATE_WIN)
+            minesDisplay = "000";
+        else {
+            int remMines = game.getNumMines() - game.getNumFlags();
+            if (remMines > 999) minesDisplay = "999";
+            else if (remMines < -99) minesDisplay = "-99";
+            else minesDisplay = String.format("%03d", remMines);
+        }
 
         // get displayed time
         String timeDisplay;
@@ -147,6 +157,7 @@ public class Board extends JComponent implements ActionListener {
         }
     }
 
+    // get the filename for the correct face image
     private String faceFile() {
         if (areaClicked == AREA_FACE && areaHovered == AREA_FACE)
             return "face_click.png";
@@ -163,13 +174,29 @@ public class Board extends JComponent implements ActionListener {
         return "face_smile.png";
     }
 
+    // get the filename for the correct cell image
     private String cellFile(int r, int c) {
         int cell = game.getCell(r, c);
 
-        if (cell == Game.CELL_FLAGGED)
+        // display flag on flagged cells
+        if (cell == Game.CELL_FLAGGED) {
+            // show a different image on loss if a flag is incorrectly placed
+            if (game.getState() != Game.STATE_PLAY && !game.getMine(r, c))
+                return "flag_bad.png";
+
             return "flag.png";
+        }
 
         if (cell == Game.CELL_HIDDEN) {
+            if (game.getState() == Game.STATE_WIN)
+                return "flag.png";
+
+            if (game.getState() == Game.STATE_LOSE) {
+                if (game.getMine(r, c))
+                    return "mine.png";
+                return "hidden.png";
+            }
+
             if (areaClicked != AREA_BOARD)
                 return "hidden.png";
 
@@ -188,6 +215,9 @@ public class Board extends JComponent implements ActionListener {
 
             return "hidden.png";
         }
+
+        if (game.getMine(r, c))
+            return "mine_bad.png";
 
         return String.format("mines%d.png", game.countMines3x3(r,c));
     }
@@ -215,12 +245,14 @@ public class Board extends JComponent implements ActionListener {
             updatePos(e);
             areaClicked = areaHovered;
 
+            // update held buttons
             switch (e.getButton()) {
                 case MouseEvent.BUTTON1 -> button1 = true;
                 case MouseEvent.BUTTON2 -> button2 = true;
                 case MouseEvent.BUTTON3 -> button3 = true;
             }
 
+            // toggle flag on right click
             if (!button1 && !button2 && button3 && game.inBounds(mouseRow, mouseCol))
                 game.toggleFlag(mouseRow, mouseCol);
 
@@ -231,33 +263,36 @@ public class Board extends JComponent implements ActionListener {
         public void mouseReleased(MouseEvent e) {
             updatePos(e);
 
+            // actions if board clicked
             if (areaClicked == AREA_BOARD && areaHovered == AREA_BOARD) {
-                if (button2 || (button1 && button3)) {
+
+                if (button2 || (button1 && button3)) { // reveal 3x3 area on middle click or left+right click
                     int count = game.getCell(mouseRow, mouseCol);
                     int flags = game.countFlags3x3(mouseRow, mouseCol);
+
                     if (count == flags)
                         game.reveal3x3(mouseRow, mouseCol);
-                }
 
-                if (button1) {
-                    game.reveal(mouseRow, mouseCol);
-                    while (game.getNumRevealed() < 9) {
-                        game.startGame();
-                        game.reveal(mouseRow, mouseCol);
+                } else if (button1) { // reveal single cell on left click
+                    // on first click, reshuffle mines until enough cell revealed
+                    if (game.getNumRevealed() == 0) {
+                        while (game.countMines3x3(mouseRow, mouseCol) > 0)
+                            game.setMines();
+                        timer.start();
                     }
-                    timer.start();
+
+                    game.revealCell(mouseRow, mouseCol);
                 }
 
                 if (game.getState() != Game.STATE_PLAY)
                     timer.stop();
             }
 
-            if (areaClicked == AREA_FACE && areaHovered == AREA_FACE) {
-                game.startGame();
-                timer.stop();
-                time = 0;
-            }
+            // restart game when face clicked
+            if (areaClicked == AREA_FACE && areaHovered == AREA_FACE)
+                startGame();
 
+            // update held buttons
             switch (e.getButton()) {
                 case MouseEvent.BUTTON1 -> button1 = false;
                 case MouseEvent.BUTTON2 -> button2 = false;
@@ -274,25 +309,19 @@ public class Board extends JComponent implements ActionListener {
             repaint();
         }
 
-        @Override
-        public void mouseExited(MouseEvent e) {
-            button1 = false;
-            button2 = false;
-            button3 = false;
-            areaClicked = AREA_OTHER;
-            repaint();
-        }
-
-        // update position
+        // update mouse position
         private void updatePos(MouseEvent e) {
+            // get unscaled coordinates
             int x = e.getX() / SCALE;
             int y = e.getY() / SCALE;
 
+            // set row and column position on board
             mouseRow = (y - 55) / CELL_SIZE;
             mouseCol = (x - 12) / CELL_SIZE;
             if (y < 55) mouseRow--;
             if (x < 12) mouseCol--;
 
+            // check mouse area
             areaHovered = checkArea(x, y);
         }
 
@@ -300,11 +329,13 @@ public class Board extends JComponent implements ActionListener {
         private int checkArea(int x, int y) {
             int rx, ry;
 
+            // check for coordinate over face
             rx = x - game.getCols() * CELL_SIZE / 2;
             ry = y - 16;
             if (rx >= 0 && ry >= 0 && rx < 24 && ry < 24)
                 return AREA_FACE;
 
+            // check for coordinate over board
             rx = x - 12;
             ry = y - 55;
             if (rx >= 0 && ry >= 0 && rx < width-20 && ry < height-63)
@@ -313,5 +344,4 @@ public class Board extends JComponent implements ActionListener {
             return AREA_OTHER;
         }
     }
-
 }

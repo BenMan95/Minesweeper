@@ -46,6 +46,20 @@ public class Game {
     }
 
     public void startGame() {
+        setMines();
+
+        // reset cells
+        for (int r = 0; r < rows; r++)
+            for (int c = 0; c < cols; c++)
+                cells[r][c] = CELL_HIDDEN;
+
+        // reset other values
+        numFlags = 0;
+        numRevealed = 0;
+        state = STATE_PLAY;
+    }
+
+    public void setMines() {
         // generate mines
         int size = rows*cols;
         boolean[] arr = new boolean[size];
@@ -61,45 +75,58 @@ public class Game {
             arr[j] = temp;
         }
 
-        // place mines and reset cells
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < cols; c++) {
-                mines[r][c] = arr[r * cols + c];
-                cells[r][c] = CELL_HIDDEN;
-            }
-        }
-
-        numFlags = 0;
-        numRevealed = 0;
-        state = STATE_PLAY;
+        // place mines
+        for (int r = 0; r < rows; r++)
+            System.arraycopy(arr, r * cols, mines[r], 0, cols);
     }
 
     // toggle flag if able
-    // does not check for out of bounds
+    // does not check for out of bounds errors
     public void toggleFlag(int r, int c) {
         if (state != STATE_PLAY)
             return;
 
-        if (cells[r][c] == CELL_FLAGGED)
-            cells[r][c] = CELL_HIDDEN;
-        else if (cells[r][c] == CELL_HIDDEN)
-            cells[r][c] = CELL_FLAGGED;
+        switch (cells[r][c]) {
+            case CELL_FLAGGED -> cells[r][c] = CELL_HIDDEN;
+            case CELL_HIDDEN -> cells[r][c] = CELL_FLAGGED;
+        }
     }
 
     // reveal cell if able
-    // also reveals cells around 0
-    // does not check for out of bounds
-    public void reveal(int r, int c) {
+    // also recursively reveals adjacent cells around 0s
+    // does not check for out of bounds errors
+    public void revealCell(int r, int c) {
+        if (checkCell(r, c))
+            state = STATE_LOSE;
+    }
+
+    // reveal cells in 3x3 area if able
+    // will check for out of bounds errors
+    public void reveal3x3(int r, int c) {
+        boolean mine_found = false;
+        for (int rn = r-1; rn <= r+1; rn++) {
+            if (rn < 0 || rn >= rows)
+                continue;
+            for (int cn = c-1; cn <= c+1; cn++)
+                if (cn >= 0 && cn < cols)
+                    mine_found |= checkCell(rn, cn);
+        }
+        if (mine_found)
+            state = STATE_LOSE;
+    }
+
+    // a helper function that reveals cells without setting the loss state
+    // returns true if a mine is found, false otherwise
+    private boolean checkCell(int r, int c) {
         if (state != STATE_PLAY)
-            return;
+            return false;
 
         if (cells[r][c] != CELL_HIDDEN)
-            return;
+            return false;
 
         if (mines[r][c]) {
             cells[r][c] = 0;
-            state = STATE_LOSE;
-            return;
+            return true;
         }
 
         cells[r][c] = countMines3x3(r, c);
@@ -109,18 +136,8 @@ public class Game {
         numRevealed++;
         if (numRevealed + numMines == rows * cols)
             state = STATE_WIN;
-    }
 
-    // reveal cells in 3x3 area if able
-    // does not check for out of bounds
-    public void reveal3x3(int r, int c) {
-        for (int rn = r-1; rn <= r+1; rn++) {
-            if (rn < 0 || rn >= rows)
-                continue;
-            for (int cn = c-1; cn <= c+1; cn++)
-                if (cn >= 0 && cn < cols)
-                    reveal(rn, cn);
-        }
+        return false;
     }
 
     // count mines in a 3x3 area
